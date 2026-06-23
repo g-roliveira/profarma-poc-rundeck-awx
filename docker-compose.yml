@@ -1,0 +1,19 @@
+services:
+  rundeck:
+    image: ${RUNDECK_IMAGE:-rundeck/rundeck:5.20.1}
+    container_name: rundeck-poc
+    hostname: rundeck-poc
+    tty: true
+    environment:
+      RUNDECK_GRAILS_URL: ${RUNDECK_GRAILS_URL:-http://localhost:4440}
+      RUNDECK_SERVER_SESSION_TIMEOUT: 86400
+    ports:
+      - "4440:4440"
+    volumes:
+      - rundeck_data:/home/rundeck/server/data
+      - ${RUNDECK_LICENSE_FILE:-/dev/null}:/home/rundeck/etc/rundeckpro-license.key
+    restart: unless-stopped
+
+volumes:
+  rundeck_data:
+    name: rundeck_poc_data

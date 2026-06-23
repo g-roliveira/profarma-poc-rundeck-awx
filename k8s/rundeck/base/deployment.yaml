@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rundeck
+  namespace: profarma-poc
+  labels:
+    app: rundeck
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rundeck
+  template:
+    metadata:
+      labels:
+        app: rundeck
+    spec:
+      containers:
+        - name: rundeck
+          image: rundeck/rundeck:5.20.1
+          ports:
+            - containerPort: 4440
+              name: http
+          env:
+            - name: RUNDECK_GRAILS_URL
+              value: "http://rundeck.local"
+            - name: RUNDECK_SERVER_SESSION_TIMEOUT
+              value: "86400"
+          volumeMounts:
+            - name: data
+              mountPath: /home/rundeck/server/data
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4440
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4440
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rundeck-data

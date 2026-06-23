@@ -1,0 +1,53 @@
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx
+  namespace: awx
+spec:
+  service_type: ClusterIP
+  ingress_type: ingress
+  ingress_annotations: |
+    traefik.ingress.kubernetes.io/router.entrypoints=web
+  hostname: awx.local
+  # PoC: sem volumes redundantes
+  postgres_storage_class: local-path
+  projects_storage_class: local-path
+  # Recursos mínimos para PoC em notebook
+  web_resource_requirements:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  task_resource_requirements:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  ee_resource_requirements:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  redis_resource_requirements:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  postgres_resource_requirements:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  # Sem replicas extras para PoC
+  web_replicas: 1
+  task_replicas: 1

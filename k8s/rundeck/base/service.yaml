@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rundeck
+  namespace: profarma-poc
+  labels:
+    app: rundeck
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4440
+      targetPort: 4440
+      protocol: TCP
+      name: http
+  selector:
+    app: rundeck

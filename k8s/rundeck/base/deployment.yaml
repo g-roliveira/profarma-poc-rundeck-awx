@@ -29,7 +29,7 @@ spec:
             - name: JVM_MAX_RAM_PERCENTAGE
               value: "50"
             - name: JAVA_OPTS
-              value: "-XX:MaxRAMPercentage=50.0 -XX:MinRAMPercentage=25.0 -XX:InitialRAMPercentage=25.0"
+              value: "-Xms256m -Xmx768m -XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0"
           volumeMounts:
             - name: data
               mountPath: /home/rundeck/server/data
@@ -49,10 +49,10 @@ spec:
             failureThreshold: 10
           resources:
             requests:
-              memory: "1Gi"
+              memory: "768Mi"
               cpu: "250m"
             limits:
-              memory: "1536Mi"
+              memory: "1280Mi"
               cpu: "1500m"
       volumes:
         - name: data

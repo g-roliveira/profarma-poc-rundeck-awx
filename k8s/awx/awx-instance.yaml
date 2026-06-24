@@ -12,42 +12,43 @@ spec:
   # PoC: sem volumes redundantes
   postgres_storage_class: local-path
   projects_storage_class: local-path
-  # Recursos para PoC (servidores com 8GB+)
+  # Recursos enxutos para PoC (Rundeck + AWX em 8GB)
+  # Orçamento: AWX ~4.3Gi + Rundeck 2Gi + sistema ~1.7Gi = 8Gi
   web_resource_requirements:
     requests:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 200m
+      memory: 384Mi
     limits:
-      cpu: 1500m
-      memory: 3Gi
+      cpu: 800m
+      memory: 1536Mi
   task_resource_requirements:
     requests:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 200m
+      memory: 384Mi
     limits:
-      cpu: 1500m
-      memory: 3Gi
+      cpu: 800m
+      memory: 1Gi
   ee_resource_requirements:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 50m
+      memory: 64Mi
     limits:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 400m
+      memory: 256Mi
   redis_resource_requirements:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 50m
+      memory: 64Mi
     limits:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 200m
+      memory: 256Mi
   postgres_resource_requirements:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 50m
+      memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 400m
+      memory: 512Mi
   # PoC: sem replicas extras
   web_replicas: 1
   task_replicas: 1

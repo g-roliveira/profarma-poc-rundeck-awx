@@ -28,8 +28,6 @@ spec:
               value: "86400"
             - name: JVM_MAX_RAM_PERCENTAGE
               value: "50"
-            - name: JAVA_OPTS
-              value: "-Xms256m -Xmx768m -XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0"
           volumeMounts:
             - name: data
               mountPath: /home/rundeck/server/data
@@ -37,22 +35,22 @@ spec:
             httpGet:
               path: /
               port: 4440
-            initialDelaySeconds: 120
+            initialDelaySeconds: 180
             periodSeconds: 60
             failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /
               port: 4440
-            initialDelaySeconds: 90
+            initialDelaySeconds: 120
             periodSeconds: 15
             failureThreshold: 10
           resources:
             requests:
-              memory: "768Mi"
+              memory: "1Gi"
               cpu: "250m"
             limits:
-              memory: "1280Mi"
+              memory: "2Gi"
               cpu: "1500m"
       volumes:
         - name: data

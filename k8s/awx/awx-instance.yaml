@@ -12,21 +12,21 @@ spec:
   # PoC: sem volumes redundantes
   postgres_storage_class: local-path
   projects_storage_class: local-path
-  # Recursos mínimos para PoC em notebook
+  # Recursos para PoC (servidores com 8GB+)
   web_resource_requirements:
     requests:
-      cpu: 250m
-      memory: 512Mi
+      cpu: 500m
+      memory: 1Gi
     limits:
-      cpu: 1000m
-      memory: 2Gi
+      cpu: 1500m
+      memory: 3Gi
   task_resource_requirements:
     requests:
-      cpu: 250m
-      memory: 512Mi
+      cpu: 500m
+      memory: 1Gi
     limits:
-      cpu: 1000m
-      memory: 2Gi
+      cpu: 1500m
+      memory: 3Gi
   ee_resource_requirements:
     requests:
       cpu: 100m
@@ -41,13 +41,17 @@ spec:
     limits:
       cpu: 500m
       memory: 1Gi
-  postgres_resource_requirements:
+  postgres_init_container_resource_requirements:
     requests:
       cpu: 100m
       memory: 256Mi
     limits:
       cpu: 500m
       memory: 1Gi
-  # Sem replicas extras para PoC
+  # PoC: sem replicas extras
   web_replicas: 1
   task_replicas: 1
+  ee_replicas: 1
+  # Desabilitar features extras que consomem RAM
+  garbage_collect_secrets: false
+  create_preload_data: false

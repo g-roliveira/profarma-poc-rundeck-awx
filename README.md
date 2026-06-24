@@ -102,6 +102,44 @@ o executor padrão SSH:
       file-copier="WinRMcpPython" />
 ```
 
+### Troubleshooting
+
+#### Rundeck OOMKilled / CrashLoopBackOff
+
+O JVM do Rundeck consome ~1-1.5GB de RAM. Se o servidor tiver pouca memória:
+
+```bash
+# Ajustar resources no deployment antes de aplicar:
+kubectl -n profarma-poc set resources deploy/rundeck \
+  --requests=memory=1Gi --limits=memory=1536Mi
+
+# Ver logs de OOM:
+kubectl -n profarma-poc describe pod -l app=rundeck | grep OOM
+```
+
+#### AWX Web CrashLoopBackOff (2/3)
+
+Geralmente é o container `redis` ou `awx-rsyslog` morrendo por falta de RAM. Verifique:
+
+```bash
+# Qual container tá morrendo?
+kubectl -n awx describe pod -l app.kubernetes.io/component=awx-web | grep -A5 "Last State"
+
+# Aumente os limites em k8s/awx/awx-instance.yaml e reaplique
+```
+
+#### Instância AWX duplicada
+
+Se houverem duas instâncias AWX no namespace (ex: `awx` e `profarma-awx`), remova a antiga:
+
+```bash
+# Listar instâncias
+kubectl -n awx get awx
+
+# Remover a duplicada
+kubectl -n awx delete awx profarma-awx
+```
+
 ### Customização dos hosts
 
 Edite os Ingresses em:

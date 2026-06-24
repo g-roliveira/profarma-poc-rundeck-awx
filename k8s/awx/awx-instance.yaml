@@ -41,7 +41,7 @@ spec:
     limits:
       cpu: 500m
       memory: 1Gi
-  postgres_init_container_resource_requirements:
+  postgres_resource_requirements:
     requests:
       cpu: 100m
       memory: 256Mi
@@ -51,7 +51,3 @@ spec:
   # PoC: sem replicas extras
   web_replicas: 1
   task_replicas: 1
-  ee_replicas: 1
-  # Desabilitar features extras que consomem RAM
-  garbage_collect_secrets: false
-  create_preload_data: false

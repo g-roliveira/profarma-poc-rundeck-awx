@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tunnel
+  namespace: default
+  labels:
+    app: tunnel
+spec:
+  hostNetwork: true
+  containers:
+    - name: cloudflared
+      image: cloudflare/cloudflared:latest
+      args:
+        - tunnel
+        - --url
+        - http://127.0.0.1:8001
+        - --no-autoupdate
+    - name: proxy
+      image: bitnami/kubectl:latest
+      args:
+        - kubectl
+        - proxy
+        - --address=127.0.0.1
+        - --port=8001
+        - --accept-hosts=.*
+        - --kubeconfig=/host/k3s.yaml
+      volumeMounts:
+        - name: kubeconfig
+          mountPath: /host
+          readOnly: true
+  volumes:
+    - name: kubeconfig
+      hostPath:
+        path: /etc/rancher/k3s
+        type: Directory
+  restartPolicy: Never

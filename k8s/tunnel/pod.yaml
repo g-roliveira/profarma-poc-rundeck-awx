@@ -14,6 +14,8 @@ spec:
         - tunnel
         - --url
         - http://127.0.0.1:8001
+        - --protocol
+        - http2
         - --no-autoupdate
     - name: proxy
       image: bitnami/kubectl:latest

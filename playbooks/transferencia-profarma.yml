@@ -1,0 +1,125 @@
+---
+# ============================================================================
+# ProFarma PoC - Playbook de Transferencia de Arquivos
+# Compatível com AWX e Rundeck
+# Cenário: simula cópia SCP entre servidores Linux e Windows (com SSH Server)
+# ============================================================================
+- name: "ProFarma PoC - Pipeline de Transferencia"
+  hosts: all
+  gather_facts: yes
+  vars:
+    origem_base: "/tmp/profarma-poc/origem"
+    destino_base: "/tmp/profarma-poc/destino"
+    # Simula os 5 arquivos que o Weber descreveu na reuniao
+    arquivos_teste:
+      - nome: "NF-e_loja_001.txt"
+        tamanho_mb: 1
+        origem_sistema: "SAP"
+      - nome: "estoque_filial_002.txt"
+        tamanho_mb: 2
+        origem_sistema: "Cobol"
+      - nome: "precificacao_20260625.txt"
+        tamanho_mb: 5
+        origem_sistema: "SQLServer"
+      - nome: "log_vendas_diario.trn"
+        tamanho_mb: 3
+        origem_sistema: "SAP"
+      - nome: "cadastro_produtos.csv"
+        tamanho_mb: 1
+        origem_sistema: "Cobol"
+
+  tasks:
+    # ========================================================================
+    # ETAPA 1: Preparar ambiente e gerar arquivos de teste
+    # ========================================================================
+    - name: "ETAPA 1/4 - Criar estrutura de diretorios"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ origem_base }}"
+        - "{{ destino_base }}"
+      tags: [setup, copy]
+
+    - name: "ETAPA 1/4 - Gerar arquivos de teste (simula saida dos sistemas)"
+      ansible.builtin.shell: |
+        dd if=/dev/urandom of="{{ origem_base }}/{{ item.nome }}" bs=1M count={{ item.tamanho_mb }} 2>/dev/null
+        echo "{{ item.nome }} | {{ item.origem_sistema }} | {{ item.tamanho_mb }}MB | $(date)"
+      loop: "{{ arquivos_teste }}"
+      register: etapa1_geracao
+      tags: [setup, copy]
+
+    - name: "ETAPA 1/4 - Exibir arquivos gerados"
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          ProFarma - ARQUIVOS GERADOS PARA COPIA
+          ==========================================
+          {% for r in etapa1_geracao.results %}
+          {{ r.stdout_lines[0] }}
+          {% endfor %}
+          ==========================================
+      tags: [setup, copy]
+
+    # ========================================================================
+    # ETAPA 2: Copiar arquivos (simulando SCP)
+    # ========================================================================
+    - name: "ETAPA 2/4 - Transferir arquivos (SCP simulado)"
+      ansible.builtin.shell: |
+        cp "{{ origem_base }}/{{ item.nome }}" "{{ destino_base }}/{{ item.nome }}"
+        ORIG_MD5=$(md5sum "{{ origem_base }}/{{ item.nome }}" | awk '{print $1}')
+        DEST_MD5=$(md5sum "{{ destino_base }}/{{ item.nome }}" | awk '{print $1}')
+        if [ "$ORIG_MD5" = "$DEST_MD5" ]; then
+          echo "SUCESSO | {{ item.nome }} | {{ item.tamanho_mb }}MB | {{ item.origem_sistema }} | checksum=${DEST_MD5:0:8}"
+        else
+          echo "FALHA | {{ item.nome }} | CHECKSUM DIVERGENTE | orig=${ORIG_MD5:0:8} dest=${DEST_MD5:0:8}"
+          exit 1
+        fi
+      loop: "{{ arquivos_teste }}"
+      register: etapa2_copia
+      ignore_errors: yes
+      tags: [copy]
+
+    # ========================================================================
+    # ETAPA 3: Validar resultado
+    # ========================================================================
+    - name: "ETAPA 3/4 - Consolidar resultado da transferencia"
+      ansible.builtin.set_fact:
+        total_arquivos: "{{ arquivos_teste | length }}"
+        arquivos_ok: "{{ etapa2_copia.results | selectattr('failed', 'equalto', false) | list | length }}"
+        arquivos_falha: "{{ etapa2_copia.results | selectattr('failed', 'equalto', true) | list | length }}"
+        arquivos_falhados: "{{ etapa2_copia.results | selectattr('failed', 'equalto', true) | map(attribute='item.nome') | list }}"
+      tags: [validate]
+
+    - name: "ETAPA 3/4 - Relatorio final da transferencia"
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          ProFarma - RELATORIO DE TRANSFERENCIA
+          ==========================================
+          Data: {{ ansible_date_time.date }} {{ ansible_date_time.time }}
+          Servidor origem: {{ inventory_hostname }}
+          {% for r in etapa2_copia.results %}
+          {% if not r.failed %}
+          ✅ {{ r.stdout_lines[0] }}
+          {% else %}
+          ❌ {{ r.stdout_lines[0] if r.stdout_lines else r.msg }}
+          {% endif %}
+          {% endfor %}
+          ==========================================
+          TOTAL: {{ total_arquivos }} | OK: {{ arquivos_ok }} | FALHAS: {{ arquivos_falha }}
+          {% if arquivos_falha | int > 0 %}
+          ARQUIVOS COM ERRO: {{ arquivos_falhados | join(', ') }}
+          {% endif %}
+          ==========================================
+      tags: [validate, report]
+
+    # ========================================================================
+    # ETAPA 4: Decidir se continua ou aborta
+    # ========================================================================
+    - name: "ETAPA 4/4 - Verificar se pode prosseguir"
+      ansible.builtin.fail:
+        msg: "TRANSFERENCIA INCOMPLETA - {{ arquivos_falha }} de {{ total_arquivos }} arquivos falharam: {{ arquivos_falhados | join(', ') }}"
+      when: arquivos_falha | int > 0
+      tags: [validate, gate]

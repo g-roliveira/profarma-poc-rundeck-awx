@@ -1,0 +1,92 @@
+- name: "ProFarma - Pipeline Completo de Transferencia"
+  description: |
+    PoC ProFarma: Pipeline de transferencia de arquivos com 4 etapas.
+    Demonstra orquestracao step-by-step com tratamento de erro,
+    notificacao e visibilidade por arquivo.
+    Roda a cada 5 minutos em horario comercial.
+  group: "ProFarma"
+  schedule:
+    crontab: "*/5 8-18 * * 1-5"
+    timezone: "America/Sao_Paulo"
+  executionEnabled: true
+  loglevel: INFO
+  maxMultipleExecutions: "1"
+  defaultNodeFilter: "tags: sync-server"
+
+  sequence:
+    keepgoing: false
+    strategy: step-first
+    commands:
+      # --- STEP 1: Copia dos arquivos ---
+      - description: "STEP 1/4 - Copiar arquivos dos sistemas (SAP/Cobol/SQL)"
+        nodeStep: true
+        configuration:
+          ansible-playbook:
+            playbook: /home/rundeck/projects/Profarma/playbooks/transferencia-profarma.yml
+            tags: "copy"
+            extraVars: |
+              ---
+              origem_base: /tmp/profarma-poc/origem
+              destino_base: /tmp/profarma-poc/destino
+
+      # --- STEP 2: Validacao de checksum ---
+      - description: "STEP 2/4 - Validar integridade dos arquivos copiados"
+        nodeStep: true
+        configuration:
+          ansible-playbook:
+            playbook: /home/rundeck/projects/Profarma/playbooks/transferencia-profarma.yml
+            tags: "validate"
+            extraVars: |
+              ---
+              origem_base: /tmp/profarma-poc/origem
+              destino_base: /tmp/profarma-poc/destino
+
+      # --- STEP 3: Notificacao no dashboard ---
+      - description: "STEP 3/4 - Registrar no log de auditoria"
+        exec: |
+          echo "========================================"
+          echo "ProFarma - AUDITORIA DE TRANSFERENCIA"
+          echo "Job: @job.name@"
+          echo "Execucao: @job.execid@"
+          echo "Status: SUCESSO"
+          echo "Timestamp: $(date -Iseconds)"
+          echo "========================================"
+
+      # --- STEP 4: Limpeza ---
+      - description: "STEP 4/4 - Limpar arquivos temporarios"
+        exec: |
+          rm -f /tmp/profarma-poc/origem/*.txt /tmp/profarma-poc/destino/*.txt 2>/dev/null
+          echo "Limpeza concluida."
+
+  # --- NOTIFICACOES ---
+  notification:
+    onfailure:
+      plugin:
+        type: "webhook"
+        configuration:
+          url: "https://webhook.site/run-deck-demo"
+          method: "POST"
+          contentType: "application/json"
+          body: |
+            {
+              "job": "@job.name@",
+              "status": "FALHOU",
+              "execution": "@job.execid@",
+              "failed_node": "@job.failedNode@",
+              "timestamp": "$(date -Iseconds)",
+              "url": "@job.url@"
+            }
+    onsuccess:
+      plugin:
+        type: "webhook"
+        configuration:
+          url: "https://webhook.site/run-deck-demo"
+          method: "POST"
+          contentType: "application/json"
+          body: |
+            {
+              "job": "@job.name@",
+              "status": "SUCESSO",
+              "execution": "@job.execid@",
+              "timestamp": "$(date -Iseconds)"
+            }

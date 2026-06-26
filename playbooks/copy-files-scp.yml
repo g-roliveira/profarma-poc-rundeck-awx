@@ -1,0 +1,73 @@
+---
+- name: "ProFarma PoC - Transferencia de Arquivos via SCP"
+  hosts: all
+  gather_facts: no
+  vars:
+    origem: "/tmp/profarma-poc/origem"
+    destino: "/tmp/profarma-poc/destino"
+    arquivos:
+      - { nome: "NF-e_20260625_001.txt", tamanho_mb: 1 }
+      - { nome: "NF-e_20260625_002.txt", tamanho_mb: 2 }
+      - { nome: "estoque_sap_20260625.txt", tamanho_mb: 5 }
+      - { nome: "precificacao_loja_001.txt", tamanho_mb: 1 }
+      - { nome: "log_backup_full_20260625.trn", tamanho_mb: 10 }
+
+  tasks:
+    - name: "Criar diretorios de origem e destino"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ origem }}"
+        - "{{ destino }}"
+
+    - name: "Gerar arquivos de teste (simula saida de SAP/Cobol)"
+      ansible.builtin.shell: |
+        dd if=/dev/urandom of="{{ origem }}/{{ item.nome }}" bs=1M count={{ item.tamanho_mb }} 2>/dev/null
+        echo "{{ item.nome }} gerado ({{ item.tamanho_mb }}MB)"
+      loop: "{{ arquivos }}"
+      register: arquivos_gerados
+
+    - name: "Exibir arquivos gerados"
+      ansible.builtin.debug:
+        msg: "{{ item.stdout_lines }}"
+      loop: "{{ arquivos_gerados.results }}"
+      when: item.stdout_lines is defined
+
+    - name: "Transferir arquivos via SCP para destino"
+      ansible.builtin.shell: |
+        cp "{{ origem }}/{{ item.nome }}" "{{ destino }}/{{ item.nome }}"
+        ORIGINAL_MD5=$(md5sum "{{ origem }}/{{ item.nome }}" | cut -d' ' -f1)
+        DESTINO_MD5=$(md5sum "{{ destino }}/{{ item.nome }}" | cut -d' ' -f1)
+        if [ "$ORIGINAL_MD5" = "$DESTINO_MD5" ]; then
+          echo "OK:{{ item.nome }}:{{ item.tamanho_mb }}MB:MD5=${DESTINO_MD5}"
+        else
+          echo "FALHA:{{ item.nome }}:checksum divergente"
+          exit 1
+        fi
+      loop: "{{ arquivos }}"
+      register: transferencias
+      ignore_errors: yes
+
+    - name: "Resumo da transferencia"
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          ProFarma - Relatorio de Transferencia
+          ========================================
+          {% for t in transferencias.results %}
+          {% if t.stdout_lines is defined %}
+          {{ t.stdout_lines[0] }}
+          {% endif %}
+          {% endfor %}
+          ========================================
+          Total: {{ arquivos | length }} arquivos
+          Sucesso: {{ transferencias.results | selectattr('failed', 'equalto', false) | list | length }}
+          Falhas: {{ transferencias.results | selectattr('failed', 'equalto', true) | list | length }}
+          ========================================
+
+    - name: "Falhar se houver erros de transferencia"
+      ansible.builtin.fail:
+        msg: "{{ transferencias.results | selectattr('failed', 'equalto', true) | list | length }} arquivos falharam na transferencia"
+      when: transferencias.results | selectattr('failed', 'equalto', true) | list | length > 0

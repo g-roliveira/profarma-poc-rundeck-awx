@@ -1,0 +1,68 @@
+- name: "ProFarma - Transferencia de Arquivos entre Servidores"
+  description: |
+    Job de demonstracao para PoC Profarma.
+    Orquestra copia de arquivos via SCP com validacao e notificacao de falhas.
+    Simula o cenario real: SAP/Cobol → Sync Server → Destino
+  group: "ProFarma/PoC"
+  schedule:
+    crontab: "*/5 * * * *"
+    timezone: "America/Sao_Paulo"
+  executionEnabled: true
+  loglevel: INFO
+  multipleExecutions: false
+  nodeFilterEditable: true
+  defaultNodeFilter: "tags: sync-server"
+
+  # === Step 1: Copiar arquivos da origem ===
+  sequence:
+    keepgoing: false
+    strategy: step-first
+    commands:
+      - description: "Step 1: Copiar arquivos TXT entre servidores"
+        jobref:
+          group: "ProFarma/PoC"
+          name: "ProFarma - Copia de Arquivos SCP"
+          nodeStep: true
+
+      - description: "Step 2: Validar integridade dos arquivos (checksum)"
+        jobref:
+          group: "ProFarma/PoC"
+          name: "ProFarma - Validacao de Checksum"
+          nodeStep: true
+
+      - description: "Step 3: Limpar arquivos temporarios"
+        exec: |
+          rm -f /tmp/profarma-poc/origem/*.txt
+          rm -f /tmp/profarma-poc/destino/*.txt
+          echo "Limpeza concluida: $(date)"
+
+  # === Notificacao de erro ===
+  notification:
+    onfailure:
+      plugin:
+        type: webhook
+        configuration:
+          url: "https://webhook.site/demo-log"
+          method: POST
+          contentType: "application/json"
+          body: |
+            {
+              "job": "${job.name}",
+              "status": "FAILED",
+              "execution_id": "${job.execid}",
+              "failed_node": "${job.failedNode}",
+              "url": "${job.url}"
+            }
+    onsuccess:
+      plugin:
+        type: webhook
+        configuration:
+          url: "https://webhook.site/demo-log"
+          method: POST
+          contentType: "application/json"
+          body: |
+            {
+              "job": "${job.name}",
+              "status": "SUCCESS",
+              "execution_id": "${job.execid}"
+            }

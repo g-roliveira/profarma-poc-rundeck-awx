@@ -1,4 +1,5 @@
 services:
+  # ===== Rundeck =====
   rundeck:
     image: ${RUNDECK_IMAGE:-rundeck/rundeck:5.20.1}
     container_name: rundeck-poc
@@ -11,9 +12,68 @@ services:
       - "4440:4440"
     volumes:
       - rundeck_data:/home/rundeck/server/data
-      - ${RUNDECK_LICENSE_FILE:-/dev/null}:/home/rundeck/etc/rundeckpro-license.key
+    restart: unless-stopped
+
+  # ===== AWX PostgreSQL =====
+  awx-postgres:
+    image: postgres:15
+    container_name: awx-postgres
+    environment:
+      POSTGRES_DB: awx
+      POSTGRES_USER: awx
+      POSTGRES_PASSWORD: awxpass
+    volumes:
+      - awx_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ===== AWX Redis =====
+  awx-redis:
+    image: redis:7
+    container_name: awx-redis
+    restart: unless-stopped
+
+  # ===== AWX Web (uWSGI + nginx) =====
+  awx-web:
+    image: quay.io/ansible/awx:24.6.0
+    container_name: awx-web
+    depends_on:
+      - awx-postgres
+      - awx-redis
+    environment:
+      DJANGO_SECRET_KEY: "POC-profarma-2026-awx-secret-key-change-me"
+      DATABASE_HOST: awx-postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: awx
+      DATABASE_USER: awx
+      DATABASE_PASSWORD: awxpass
+      REDIS_HOST: awx-redis
+      REDIS_PORT: "6379"
+      AWX_ADMIN_PASSWORD: ${AWX_ADMIN_PASSWORD:-admin}
+    ports:
+      - "8052:8052"
+    restart: unless-stopped
+
+  # ===== AWX Task (Celery Worker) =====
+  awx-task:
+    image: quay.io/ansible/awx:24.6.0
+    container_name: awx-task
+    depends_on:
+      - awx-postgres
+      - awx-redis
+    environment:
+      DJANGO_SECRET_KEY: "POC-profarma-2026-awx-secret-key-change-me"
+      DATABASE_HOST: awx-postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: awx
+      DATABASE_USER: awx
+      DATABASE_PASSWORD: awxpass
+      REDIS_HOST: awx-redis
+      REDIS_PORT: "6379"
+    command: /usr/bin/launch_awx_task.sh
     restart: unless-stopped
 
 volumes:
   rundeck_data:
     name: rundeck_poc_data
+  awx_pg_data:
+    name: awx_pg_data

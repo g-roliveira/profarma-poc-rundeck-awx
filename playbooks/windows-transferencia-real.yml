@@ -1,0 +1,134 @@
+---
+# ============================================================================
+# ProFarma PoC - Transferencia REAL em Windows Server
+# Servidor: CXC-MAKER-DEV-0 (10.10.100.132)
+# Protocolo: WinRM (SSH Server nao disponivel nesta maquina)
+# ============================================================================
+- name: "ProFarma PoC - Transferencia REAL Windows Server"
+  hosts: windows
+  gather_facts: yes
+  vars:
+    origem: "C:\\Temp\\profarma-poc\\origem"
+    destino: "C:\\Temp\\profarma-poc\\destino"
+    arquivos_teste:
+      - { nome: "NF-e_loja_001.txt", tamanho_mb: 1, sistema: "SAP" }
+      - { nome: "estoque_filial_002.txt", tamanho_mb: 2, sistema: "Cobol" }
+      - { nome: "precificacao_20260625.txt", tamanho_mb: 5, sistema: "SQLServer" }
+      - { nome: "log_vendas_diario.trn", tamanho_mb: 3, sistema: "SAP" }
+      - { nome: "cadastro_produtos.csv", tamanho_mb: 1, sistema: "Cobol" }
+
+  tasks:
+    # ========================================================================
+    # ETAPA 1: Preparar ambiente
+    # ========================================================================
+    - name: "ETAPA 1/4 - Criar diretorios de origem e destino"
+      ansible.windows.win_file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "{{ origem }}"
+        - "{{ destino }}"
+
+    - name: "ETAPA 1/4 - Gerar arquivos de teste (simula saida SAP/Cobol/SQL)"
+      ansible.windows.win_shell: |
+        $origem = "{{ origem }}"
+        $files = @(
+          @{Name="NF-e_loja_001.txt"; SizeMB=1},
+          @{Name="estoque_filial_002.txt"; SizeMB=2},
+          @{Name="precificacao_20260625.txt"; SizeMB=5},
+          @{Name="log_vendas_diario.trn"; SizeMB=3},
+          @{Name="cadastro_produtos.csv"; SizeMB=1}
+        )
+        foreach ($f in $files) {
+          $path = Join-Path $origem $f.Name
+          $bytes = New-Object byte[] ($f.SizeMB * 1MB)
+          (New-Object Random).NextBytes($bytes)
+          [IO.File]::WriteAllBytes($path, $bytes)
+          $hash = (Get-FileHash -Path $path -Algorithm MD5).Hash
+          Write-Output "GERADO|$($f.Name)|$($f.SizeMB)MB|MD5=$hash"
+        }
+      register: etapa1_geracao
+
+    - name: "ETAPA 1/4 - Resumo arquivos gerados"
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          ProFarma - ARQUIVOS GERADOS (Windows)
+          Servidor: {{ inventory_hostname }}
+          {% for line in etapa1_geracao.stdout_lines %}
+          {{ line }}
+          {% endfor %}
+          ==========================================
+
+    # ========================================================================
+    # ETAPA 2: Copiar arquivos com validacao
+    # ========================================================================
+    - name: "ETAPA 2/4 - Copiar e validar checksum de cada arquivo"
+      ansible.windows.win_shell: |
+        $origem = "{{ origem }}"
+        $destino = "{{ destino }}"
+        $results = @()
+        Get-ChildItem $origem -File | ForEach-Object {
+          $src = $_.FullName
+          $dst = Join-Path $destino $_.Name
+          try {
+            Copy-Item -Path $src -Destination $dst -Force -ErrorAction Stop
+            $srcHash = (Get-FileHash -Path $src -Algorithm MD5).Hash
+            $dstHash = (Get-FileHash -Path $dst -Algorithm MD5).Hash
+            if ($srcHash -eq $dstHash) {
+              $status = "SUCESSO"
+            } else {
+              $status = "FALHA_CHECKSUM"
+            }
+          } catch {
+            $status = "FALHA_COPIA"
+            $dstHash = "N/A"
+          }
+          Write-Output "$status|$($_.Name)|$([math]::Round($_.Length/1MB,1))MB|MD5=$($dstHash.Substring(0,8))"
+        }
+      register: etapa2_copia
+
+    - name: "ETAPA 2/4 - Resultado da copia"
+      ansible.builtin.debug:
+        msg: |
+          {% for line in etapa2_copia.stdout_lines %}
+          {{ '✅' if line.startswith('SUCESSO') else '❌' }} {{ line }}
+          {% endfor %}
+
+    # ========================================================================
+    # ETAPA 3: Relatorio consolidado
+    # ========================================================================
+    - name: "ETAPA 3/4 - Contabilizar resultados"
+      ansible.builtin.set_fact:
+        linhas: "{{ etapa2_copia.stdout_lines }}"
+        sucessos: "{{ etapa2_copia.stdout_lines | select('match', '^SUCESSO') | list | length }}"
+        falhas: "{{ etapa2_copia.stdout_lines | reject('match', '^SUCESSO') | list | length }}"
+
+    - name: "ETAPA 3/4 - RELATORIO FINAL DE TRANSFERENCIA"
+      ansible.builtin.debug:
+        msg: |
+          ==========================================
+          ProFarma - RELATORIO DE TRANSFERENCIA
+          ==========================================
+          Data: {{ ansible_date_time.date }} {{ ansible_date_time.time }}
+          Servidor: {{ inventory_hostname }} (Windows {{ ansible_os_name }})
+          IP: {{ ansible_host }}
+          ==========================================
+          {% for line in etapa2_copia.stdout_lines %}
+          {{ '✅' if line.startswith('SUCESSO') else '❌' }} {{ line }}
+          {% endfor %}
+          ==========================================
+          TOTAL: {{ sucessos + falhas }} | OK: {{ sucessos }} | FALHAS: {{ falhas }}
+          ==========================================
+
+    # ========================================================================
+    # ETAPA 4: Gate condicional
+    # ========================================================================
+    - name: "ETAPA 4/4 - ABORTAR se houver falhas"
+      ansible.builtin.fail:
+        msg: "TRANSFERENCIA INCOMPLETA - {{ falhas }} de {{ sucessos + falhas }} arquivos FALHARAM!"
+      when: falhas | int > 0
+
+    - name: "ETAPA 4/4 - Sucesso confirmado"
+      ansible.builtin.debug:
+        msg: "✅ PIPELINE COMPLETO - Todos os {{ sucessos }} arquivos transferidos com sucesso no Windows Server!"

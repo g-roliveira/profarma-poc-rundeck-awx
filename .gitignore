@@ -1,4 +1,4 @@
 .secrets/
 .firecrawl/
 .env
-inventory/
+playbooks/inventory/windows.ini

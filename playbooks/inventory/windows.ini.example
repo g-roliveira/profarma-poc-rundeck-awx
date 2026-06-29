@@ -1,0 +1,11 @@
+# ============================================================================
+# ProFarma PoC - Inventory para Servidores Windows
+# RENOMEIE para windows.ini e preencha as credenciais reais
+# ============================================================================
+[windows]
+# Substitua pelos dados reais dos servidores da ProFarma
+CXC-MAKER-DEV-0 ansible_host=10.10.100.XXX ansible_user=SEU_USUARIO ansible_password=SUA_SENHA ansible_connection=winrm ansible_winrm_transport=ntlm ansible_winrm_server_cert_validation=ignore
+
+[linux]
+# Servidores Linux com SSH/SCP
+# sync-server-01 ansible_host=10.10.100.XXX ansible_user=root ansible_ssh_private_key_file=~/.ssh/profarma_key

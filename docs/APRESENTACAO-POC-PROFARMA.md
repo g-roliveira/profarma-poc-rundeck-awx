@@ -65,33 +65,43 @@ TOTAL: 5 | OK: 5 | FALHAS: 0
 
 | Critério | Rundeck | AWX |
 |---|---|---|
-| Workflow multi-step | ✅ Nativo, com gate condicional entre steps | ⚠️ Workflow de jobs, menos granular |
-| Execução condicional | ✅ "Step 1 falhou? Step 2 nem roda" | ⚠️ Via playbook (quando statement no YAML) |
-| Multi-protocolo nativo | ✅ SSH, WinRM, SQL, HTTP, Script no mesmo job | ❌ Apenas Ansible (via Execution Environment) |
-| Agendamento | ✅ Cron granular (`*/5 8-18 * * 1-5`) | ✅ Cron simples |
-| Retry em falha | ✅ Configurável por step | ⚠️ Por job template |
-| Notificações | ✅ Email, Teams, Slack, Webhook nativos | ⚠️ Callbacks limitados |
+| Workflow | ✅ Workflow nativo com steps individuais, gate condicional entre steps | ✅ Workflow Job Templates com ramificação por sucesso/falha |
+| Granularidade natural | Step operacional — script, comando, API call | Job/playbook — a unidade é o playbook Ansible |
+| Execução condicional | ✅ "Step 1 falhou? Step 2 nem roda" — direto e visível | ✅ Via ramificação de workflow — condicionais no nível de job |
+| Multi-protocolo nativo | ✅ SSH, WinRM, SQL, HTTP, Script no mesmo job | ⚠️ Focado em Ansible — outros protocolos dependem de módulos/EE customizados |
+| Agendamento | ✅ Cron granular (`*/5 8-18 * * 1-5`) | ✅ Cron via schedules |
+| Notificações | ✅ Email, Teams, Slack, Webhook — nativos, por job | ✅ Webhook/callback — disponível, menos integrações diretas |
+
+> **Diferença-chave:** Ambos têm workflow. O AWX trabalha no nível de **job/playbook**;
+> o Rundeck desce ao nível de **step operacional** com drill-down visível.
+> Para o caso ProFarma — "qual arquivo falhou em qual etapa?" — o step do Rundeck
+> é a unidade natural de observação.
 
 ### 4.2 Dashboard, Reports e Histórico
 
 | Critério | Rundeck | AWX |
 |---|---|---|
-| Dashboard visual | ✅ Gráfico de sucesso/falha por projeto | ❌ Não tem dashboard built-in |
-| Drill-down por execução | ✅ Cada step com expandir/recolher | ❌ Output bruto do Ansible |
-| Visibilidade de arquivo | ✅ Relatório com ✅/❌ por arquivo | ❌ Precisa parsear stdout |
-| Relatório agendado (PDF/JSON) | ✅ Export nativo | ❌ Não tem |
-| Gráfico de tendência | ✅ Success rate por job/projeto | ❌ Precisa de Grafana |
-| Trilha de auditoria | ✅ Quem, quando, nó, resultado | ⚠️ Básico (quem executou) |
+| Dashboard visual | ✅ Gráfico de sucesso/falha por projeto, job e nó | ⚠️ Lista de execuções com status — funcional, sem gráfico built-in |
+| Drill-down por execução | ✅ Cada step com expandir/recolher, output isolado | ✅ Tasks, hosts e eventos do Ansible — visível, mas contínuo |
+| Visibilidade por arquivo | ✅ Relatório formatado com ✅/❌ por arquivo dentro do step | ⚠️ Depende do playbook modelar o output — senão vira leitura de log |
+| Relatório agendado (PDF/JSON) | ✅ Export nativo agendável | ❌ Não disponível |
+| Gráfico de tendência | ✅ Success rate por job/projeto | ❌ Precisa de ferramenta externa (Grafana) |
+| Trilha de auditoria | ✅ Quem, quando, de onde, qual nó, resultado | ⚠️ Quem executou e resultado — menos granular |
+
+> **Diferença-chave:** AWX expõe tasks e eventos do Ansible — é navegável, mas o
+> output é contínuo. O Rundeck divide naturalmente por step, então "onde parou"
+> é visual e imediato. Para "qual arquivo específico falhou", se o playbook não
+> modelar isso com eventos individuais, no AWX vira grep no stdout.
 
 ### 4.3 Escala e Cloud-Native
 
 | Critério | Rundeck | AWX |
 |---|---|---|
-| Escala automática | ❌ Precisa configurar HPA manualmente | ✅ Operator com Instance Groups |
-| Isolamento de execução | Processo local (shared) | ✅ Container por job (Execution Environment) |
-| Deploy GitOps | ⚠️ Manual ou plugin de terceiros | ✅ Pull automático do Git |
-| Multi-instância | ✅ Cluster mode (active/passive) | ✅ Operator gerencia |
-| Execution Environments | ❌ Depende do SO do nó | ✅ Container isolado por job |
+| Escala automática | ❌ Precisa de HPA configurado manualmente | ✅ Operator com Instance Groups — escala nativa |
+| Isolamento de execução | Processo compartilhado no container Rundeck | ✅ Container por job (Execution Environment) |
+| Integração Git/SCM | ⚠️ Via plugin de terceiros ou script | ✅ Nativa — sync/update-on-launch de projetos Git |
+| Multi-instância | ✅ Cluster mode (active/passive) | ✅ Operator gerencia réplicas |
+| Execution Environments | ❌ Depende do SO e pacotes do nó | ✅ Container isolado e versionado por job |
 
 ### 4.4 Segurança e Governança
 
@@ -110,47 +120,89 @@ TOTAL: 5 | OK: 5 | FALHAS: 0
 > *"Tenho 5 scripts para um processo só. Um copia pra Linux, outro pra Windows, outro valida,
 > outro manda pra outro servidor. Se um falha, tenho que descobrir qual arquivo parou."*
 
-### Como cada ferramenta resolve
+### Como cada ferramenta aborda
 
 | Etapa do processo | Rundeck | AWX |
 |---|---|---|
-| 1. Copiar SAP → Sync Server Linux | Step 1 — SCP nativo | Job Template 1 — playbook Ansible |
-| 2. Copiar Linux → Sync Server Windows | Step 2 — WinRM nativo | Job Template 2 — playbook Ansible |
-| 3. Validar checksum | Step 3 — Script inline | Job Template 3 — playbook Ansible |
-| 4. Se falhou, notificar | Step 4 condicional + Webhook | Workflow com notificação limitada |
-| 5. Dashboard de falha | ✅ Mostra step e arquivo exato | ❌ Stdout bruto, precisa grep |
-| 6. Reduzir 5 scripts → 1 job | ✅ 1 workflow Rundeck | ⚠️ 1 workflow AWX (menos granular) |
+| 1. Copiar SAP → Sync Server Linux | Step 1 — SCP nativo | Job Template — playbook Ansible |
+| 2. Copiar Linux → Sync Server Windows | Step 2 — WinRM nativo | Job Template — playbook Ansible |
+| 3. Validar checksum | Step 3 — Script inline | Job Template — playbook Ansible |
+| 4. Se falhou, notificar time | Step 4 condicional + Webhook/Email/Teams | Ramificação no workflow + webhook |
+| 5. "Qual arquivo falhou?" | ✅ Step mostra ✅/❌ por arquivo | ⚠️ Depende do playbook modelar a saída |
+| 6. Reduzir 5 scripts → 1 processo | ✅ 1 workflow Rundeck com 5 steps | ✅ 1 workflow AWX com 5 job templates |
+
+> Ambos resolvem. A diferença está em quem olha: o Rundeck entrega o processo de
+> negócio visível; o AWX entrega a execução Ansible padronizada.
 
 ---
 
 ## 6. Recomendação
 
-### Rundeck como orquestrador principal
+### O que cada ferramenta resolve melhor
 
-Para o cenário da ProFarma — onde o problema é **orquestração de processos multi-etapa**
-com necessidade de **visibilidade granular por arquivo** — o Rundeck entrega mais valor:
+**O AWX Operator resolveu o problema de plataforma:** deploy declarativo, escala
+automática via Instance Groups, isolamento de execução com Execution Environments
+e integração nativa com Git/SCM. Para times que precisam executar playbooks Ansible
+em escala, com inventory dinâmico, credentials centralizados e ambientes isolados,
+o AWX moderno é a resposta certa.
 
-1. **Dashboard nativo** → Weber olha e sabe qual job, qual step, qual arquivo falhou
-2. **Notificações** → integração direta com Teams/Email sem middleware
-3. **Multi-protocolo** → SSH (Linux) e WinRM (Windows) no mesmo job, sem adaptação
-4. **Agendamento granular** → `*/15 8-18 * * 1-5` nativo
+**Mas o problema da ProFarma não é primariamente escala de playbook.** É
+**orquestração e observabilidade operacional** de processos legados — ~300 scripts
+que precisam virar workflows visíveis, com drill-down por etapa e arquivo.
+
+### Por que Rundeck como orquestrador principal
+
+1. **O processo de negócio fica visível.** Cada step do workflow é uma unidade
+   operacional com output isolado — Weber olha o dashboard e sabe exatamente
+   qual etapa falhou e qual arquivo parou, sem precisar interpretar stdout de playbook.
+
+2. **Multi-protocolo sem adaptação.** SSH (Linux), WinRM (Windows), chamadas SQL,
+   scripts shell, comandos HTTP — tudo no mesmo workflow, sem depender de módulos
+   Ansible ou Execution Environments customizados.
+
+3. **Notificações integradas ao negócio.** Email, Teams, Slack, Webhook saem
+   direto do job, com contexto: qual step, qual nó, qual arquivo, qual horário.
+
+4. **Dashboard e auditoria prontos.** Gráfico de tendência, relatório agendado,
+   trilha de quem executou o quê — nativo, sem ferramenta externa.
 
 ### Onde o AWX complementa
 
-Para execuções em **larga escala** (mesmo playbook em 100+ servidores simultâneos),
-o AWX com Operator + Instance Groups + Execution Environments é superior em isolamento e paralelismo.
+Para playbooks Ansible complexos ou execuções em **larga escala** (100+ servidores
+simultâneos), o AWX com Operator + Instance Groups + Execution Environments é
+superior em isolamento, paralelismo e padronização da execução Ansible.
 
-### Arquitetura híbrida (futuro)
+### Arquitetura recomendada
 
 ```
-Rundeck (orquestrador)
-  │  Agenda, workflow condicional, notificações, dashboard
-  │
-  ├── Step 1: Copiar arquivos (SSH/WinRM nativo)
-  ├── Step 2: Validar checksum (Script inline)
-  ├── Step 3: Chamar AWX job template (execução em escala)
-  └── Step 4: Notificar resultado (Webhook/Teams/Email)
+Quem olha:         Weber (negócio)                    Time técnico (infra)
+                       │                                    │
+Interface:        Rundeck Dashboard                    AWX Job Templates
+                       │                                    │
+Função:           Orquestração operacional             Execução Ansible escalável
+                   Workflows multi-step                 Execution Environments
+                   Notificações de negócio              Credentials centralizados
+                   Auditoria e relatórios               Inventory dinâmico
+                       │                                    │
+                       └────────────┬───────────────────────┘
+                                    │
+                          Ansible Playbooks
+                          (mesmo playbook, ambos ambientes)
+                                    │
+                          ┌─────────┴─────────┐
+                     Windows Server    Linux Servers
+                    (WinRM / SSH SCP)  (SSH nativo)
 ```
+
+### Resumo
+
+| Pergunta | Resposta |
+|---|---|
+| Qual é o orquestrador do processo? | **Rundeck** — mostra o negócio, step por step |
+| Qual é o motor Ansible? | **AWX** — executa com EE, escala e isolamento |
+| O Weber olha o quê? | **Rundeck** — dashboard com drill-down por arquivo |
+| O time técnico usa o quê? | **AWX** — padronização e execução Ansible |
+| Para a PoC, o foco é? | **Rundeck como orquestrador e dashboard** |
 
 ---
 

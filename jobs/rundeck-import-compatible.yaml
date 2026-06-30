@@ -1,0 +1,110 @@
+- name: "ProFarma - Pipeline Completo de Transferencia"
+  description: |
+    PoC ProFarma: Pipeline de transferencia de arquivos com 4 etapas.
+    Versao compativel com o container atual do Rundeck, usando steps exec.
+  group: "ProFarma"
+  executionEnabled: true
+  scheduleEnabled: false
+  loglevel: INFO
+  multipleExecutions: false
+  sequence:
+    keepgoing: false
+    strategy: node-first
+    commands:
+      - description: "STEP 1/4 - Gerar arquivos dos sistemas"
+        script: |
+          set -e
+          ORIGEM=/tmp/profarma-poc/origem
+          DESTINO=/tmp/profarma-poc/destino
+          mkdir -p "$ORIGEM" "$DESTINO"
+          rm -f "$ORIGEM"/* "$DESTINO"/* 2>/dev/null || true
+          dd if=/dev/urandom of="$ORIGEM/NF-e_loja_001.txt" bs=1M count=1 2>/dev/null
+          dd if=/dev/urandom of="$ORIGEM/estoque_filial_002.txt" bs=1M count=2 2>/dev/null
+          dd if=/dev/urandom of="$ORIGEM/precificacao_20260625.txt" bs=1M count=5 2>/dev/null
+          dd if=/dev/urandom of="$ORIGEM/log_vendas_diario.trn" bs=1M count=3 2>/dev/null
+          dd if=/dev/urandom of="$ORIGEM/cadastro_produtos.csv" bs=1M count=1 2>/dev/null
+          ls -lh "$ORIGEM"
+      - description: "STEP 2/4 - Copiar arquivos"
+        script: |
+          set -e
+          ORIGEM=/tmp/profarma-poc/origem
+          DESTINO=/tmp/profarma-poc/destino
+          mkdir -p "$DESTINO"
+          cp "$ORIGEM"/* "$DESTINO"/
+          echo "Arquivos copiados para $DESTINO"
+          ls -lh "$DESTINO"
+      - description: "STEP 3/4 - Validar checksum"
+        script: |
+          set -e
+          ORIGEM=/tmp/profarma-poc/origem
+          DESTINO=/tmp/profarma-poc/destino
+          echo "========================================"
+          echo "ProFarma - VALIDACAO DE CHECKSUM"
+          echo "========================================"
+          for src in "$ORIGEM"/*; do
+            file="$(basename "$src")"
+            dst="$DESTINO/$file"
+            src_md5="$(md5sum "$src" | awk '{print $1}')"
+            dst_md5="$(md5sum "$dst" | awk '{print $1}')"
+            if [ "$src_md5" = "$dst_md5" ]; then
+              echo "OK | $file | checksum=${dst_md5}"
+            else
+              echo "FALHA | $file | origem=${src_md5} destino=${dst_md5}"
+              exit 1
+            fi
+          done
+      - description: "STEP 4/4 - Auditoria e limpeza"
+        script: |
+          set -e
+          echo "========================================"
+          echo "ProFarma - AUDITORIA DE TRANSFERENCIA"
+          echo "Job: @job.name@"
+          echo "Execucao: @job.execid@"
+          echo "Status: SUCESSO"
+          echo "Timestamp: $(date -Iseconds)"
+          echo "========================================"
+          rm -f /tmp/profarma-poc/origem/* /tmp/profarma-poc/destino/* 2>/dev/null || true
+          echo "Limpeza concluida."
+
+- name: "ProFarma - Transferencia de Arquivos entre Servidores"
+  description: |
+    Job de demonstracao para PoC ProFarma.
+    Simula copia de arquivos com validacao e log passo a passo.
+  group: "ProFarma/PoC"
+  executionEnabled: true
+  scheduleEnabled: false
+  loglevel: INFO
+  multipleExecutions: false
+  sequence:
+    keepgoing: false
+    strategy: node-first
+    commands:
+      - description: "Step 1 - Preparar arquivos"
+        script: |
+          set -e
+          mkdir -p /tmp/profarma-poc/origem /tmp/profarma-poc/destino
+          rm -f /tmp/profarma-poc/origem/* /tmp/profarma-poc/destino/* 2>/dev/null || true
+          for item in NF-e_20260625_001.txt estoque_sap_20260625.txt precificacao_loja_001.txt; do
+            printf "arquivo=%s data=%s\n" "$item" "$(date -Iseconds)" > "/tmp/profarma-poc/origem/$item"
+          done
+          ls -l /tmp/profarma-poc/origem
+      - description: "Step 2 - Copiar arquivos"
+        script: |
+          set -e
+          cp /tmp/profarma-poc/origem/* /tmp/profarma-poc/destino/
+          ls -l /tmp/profarma-poc/destino
+      - description: "Step 3 - Validar integridade e limpar"
+        script: |
+          set -e
+          falhas=0
+          for src in /tmp/profarma-poc/origem/*; do
+            file="$(basename "$src")"
+            if cmp -s "$src" "/tmp/profarma-poc/destino/$file"; then
+              echo "OK | $file"
+            else
+              echo "FALHA | $file"
+              falhas=$((falhas + 1))
+            fi
+          done
+          rm -f /tmp/profarma-poc/origem/* /tmp/profarma-poc/destino/* 2>/dev/null || true
+          [ "$falhas" -eq 0 ]

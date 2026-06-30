@@ -1,0 +1,85 @@
+---
+- name: "ProFarma PoC - 50 scripts no Linux via SSH"
+  hosts: all
+  gather_facts: true
+  vars:
+    profarma_base: "/tmp/profarma-poc-50"
+    processos:
+      - nome: "01-recebimento-fiscal"
+        inicio: 1
+        fim: 10
+      - nome: "02-estoque-sap"
+        inicio: 11
+        fim: 20
+      - nome: "03-precificacao-lojas"
+        inicio: 21
+        fim: 30
+      - nome: "04-integracao-cobol"
+        inicio: 31
+        fim: 40
+      - nome: "05-backup-log-sql"
+        inicio: 41
+        fim: 50
+
+  tasks:
+    - name: "Preparar diretorios da PoC"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ profarma_base }}"
+        - "{{ profarma_base }}/entrada"
+        - "{{ profarma_base }}/saida"
+        - "{{ profarma_base }}/logs"
+      tags: [setup]
+
+    - name: "Executar bloco de scripts ProFarma"
+      ansible.builtin.shell: |
+        set -e
+        processo="{{ item.nome }}"
+        echo "===== PROCESSO ${processo} ====="
+        for n in $(seq {{ item.inicio }} {{ item.fim }}); do
+          script_id=$(printf "%02d" "$n")
+          arquivo="{{ profarma_base }}/entrada/script_${script_id}_${processo}.txt"
+          destino="{{ profarma_base }}/saida/script_${script_id}_${processo}.txt"
+          log="{{ profarma_base }}/logs/script_${script_id}_${processo}.log"
+          printf "script=%s processo=%s host=$(hostname) data=$(date -Iseconds)\n" "$script_id" "$processo" > "$arquivo"
+          cp "$arquivo" "$destino"
+          if cmp -s "$arquivo" "$destino"; then
+            echo "OK | script_${script_id} | ${processo} | arquivo=$(basename "$destino")" | tee "$log"
+          else
+            echo "FALHA | script_${script_id} | ${processo} | checksum divergente" | tee "$log"
+            exit 1
+          fi
+        done
+      loop: "{{ processos }}"
+      register: blocos
+      changed_when: true
+      tags: [run]
+
+    - name: "Relatorio consolidado dos 50 scripts"
+      ansible.builtin.shell: |
+        set -e
+        echo "========================================"
+        echo "ProFarma - RELATORIO 50 SCRIPTS"
+        echo "Host: $(hostname)"
+        echo "Data: $(date -Iseconds)"
+        echo "========================================"
+        cat {{ profarma_base }}/logs/*.log
+        echo "========================================"
+        echo "TOTAL: $(find {{ profarma_base }}/logs -type f | wc -l) scripts executados"
+      register: relatorio
+      changed_when: false
+      tags: [report]
+
+    - name: "Exibir relatorio"
+      ansible.builtin.debug:
+        msg: "{{ relatorio.stdout_lines }}"
+      tags: [report]
+
+    - name: "Limpeza opcional"
+      ansible.builtin.file:
+        path: "{{ profarma_base }}"
+        state: absent
+      tags: [cleanup]
